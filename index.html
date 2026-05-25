@@ -13,11 +13,7 @@
             margin: 0;
             padding: 20px;
         }
-
-        h2 {
-            margin-bottom: 20px;
-        }
-
+        h2 { margin-bottom: 20px; }
         .grid {
             display: flex;
             flex-wrap: wrap;
@@ -25,7 +21,6 @@
             gap: 15px;
             padding: 20px;
         }
-
         .card {
             width: 170px;
             min-height: 170px;
@@ -43,39 +38,30 @@
             text-align: center;
             user-select: none;
         }
-
         .answer {
             background: white;
             color: black;
         }
-
-        .card.active-gaze,
-        .answer.active-gaze {
+        .card.active-gaze, .answer.active-gaze {
             transform: scale(1.08);
             border: 6px solid yellow;
             box-shadow: 0 0 30px yellow;
         }
-
         .timer {
             width: 75%;
             height: 10px;
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255,255,255,0.3);
             border-radius: 10px;
             margin-top: 12px;
             overflow: hidden;
         }
-
-        .answer .timer {
-            background: #ddd;
-        }
-
+        .answer .timer { background: #ddd; }
         .timer-fill {
             width: 0%;
             height: 100%;
             background: yellow;
             transition: width 0.1s linear;
         }
-
         .answers {
             display: none;
             flex-wrap: wrap;
@@ -83,14 +69,12 @@
             justify-content: center;
             margin-top: 20px;
         }
-
         .back {
             margin-top: 20px;
             font-size: 22px;
             cursor: pointer;
             font-weight: bold;
         }
-
         .eyeButton {
             padding: 15px 25px;
             font-size: 18px;
@@ -101,7 +85,6 @@
             color: white;
             margin-bottom: 20px;
         }
-
         .calibration-dot {
             width: 35px;
             height: 35px;
@@ -109,18 +92,87 @@
             background: red;
             position: fixed;
             z-index: 9999;
-            cursor: pointer;
+            pointer-events: none;
+        }
+        .status {
+            margin: 10px 0;
+            font-size: 16px;
+            color: #666;
+            min-height: 20px;
         }
     </style>
 </head>
 <body>
     <h2 id="title">Kies een vraag</h2>
-    <button class="eyeButton" onclick="startCalibration()">👁️ Oogbesturing starten</button>
+    <button class="eyeButton" onclick="initWebGazer()">👁️ Oogbesturing starten</button>
+    <div id="status" class="status"></div>
     <div id="questions" class="grid"></div>
     <div id="answers" class="answers"></div>
     <div class="back" onclick="goBack()">⬅ Terug</div>
 
     <script>
+        // ===== DATA =====
+        const data = [
+            {
+                q: "Wanneer ben jij blij?",
+                color: "#4A90E2",
+                icon: "😊",
+                answers: [
+                    {t:"vrienden", i:"👫"},
+                    {t:"familie", i:"👨‍👩‍👧"},
+                    {t:"muziek", i:"🎵"},
+                    {t:"eten", i:"🍽️"}
+                ]
+            },
+            {
+                q: "Wat eet jij graag?",
+                color: "#E94E4E",
+                icon: "🍕",
+                answers: [
+                    {t:"pizza", i:"🍕"},
+                    {t:"friet", i:"🍟"},
+                    {t:"kip", i:"🍗"},
+                    {t:"ijs", i:"🍦"}
+                ]
+            },
+            {
+                q: "Wat doe jij graag buiten?",
+                color: "#4CAF50",
+                icon: "🌳",
+                answers: [
+                    {t:"voetballen", i:"⚽"},
+                    {t:"basketballen", i:"🏀"},
+                    {t:"tuin werken", i:"🌱"},
+                    {t:"dieren verzorgen", i:"🐄"}
+                ]
+            },
+            {
+                q: "Wat doe jij graag met vrienden?",
+                color: "#FF9800",
+                icon: "👫",
+                answers: [
+                    {t:"buiten spelen", i:"🌳"},
+                    {t:"go-carten", i:"🏎️"},
+                    {t:"uitgaan", i:"🎉"},
+                    {t:"niets", i:"😐"}
+                ]
+            }
+        ];
+
+        // ===== DOM ELEMENTS =====
+        const qDiv = document.getElementById("questions");
+        const aDiv = document.getElementById("answers");
+        const titleEl = document.getElementById("title");
+        const statusEl = document.getElementById("status");
+
+        // ===== GLOBALE VARIABELEN =====
+        let currentElement = null;
+        let dwellTimeout = null;
+        let progressInterval = null;
+        let isTracking = false;
+        let webGazerReady = false;
+
+        // ===== FUNCTIES =====
         function speak(text) {
             speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
@@ -129,75 +181,26 @@
             speechSynthesis.speak(utterance);
         }
 
-        const data = [
-            {
-                q: "Wanneer ben jij blij?",
-                color: "#4A90E2",
-                icon: "😊",
-                answers: [
-                    { t: "vrienden", i: "👫" },
-                    { t: "familie", i: "👨‍👩‍👧" },
-                    { t: "muziek", i: "🎵" },
-                    { t: "eten", i: "🍽️" }
-                ]
-            },
-            {
-                q: "Wat eet jij graag?",
-                color: "#E94E4E",
-                icon: "🍕",
-                answers: [
-                    { t: "pizza", i: "🍕" },
-                    { t: "friet", i: "🍟" },
-                    { t: "kip", i: "🍗" },
-                    { t: "ijs", i: "🍦" }
-                ]
-            },
-            {
-                q: "Wat doe jij graag buiten?",
-                color: "#4CAF50",
-                icon: "🌳",
-                answers: [
-                    { t: "voetballen", i: "⚽" },
-                    { t: "basketballen", i: "🏀" },
-                    { t: "tuin werken", i: "🌱" },
-                    { t: "dieren verzorgen", i: "🐄" }
-                ]
-            },
-            {
-                q: "Wat doe jij graag met vrienden?",
-                color: "#FF9800",
-                icon: "👫",
-                answers: [
-                    { t: "buiten spelen", i: "🌳" },
-                    { t: "go-carten", i: "🏎️" },
-                    { t: "uitgaan", i: "🎉" },
-                    { t: "niets", i: "😐" }
-                ]
-            }
-        ];
-
-        const qDiv = document.getElementById("questions");
-        const aDiv = document.getElementById("answers");
-        const title = document.getElementById("title");
+        function updateStatus(text) {
+            statusEl.textContent = text;
+        }
 
         function loadQuestions() {
             qDiv.innerHTML = "";
             data.forEach((item, index) => {
-                const div = document.createElement("div");
-                div.className = "card";
-                div.style.background = item.color;
-                div.innerHTML = `
+                const card = document.createElement("div");
+                card.className = "card";
+                card.style.background = item.color;
+                card.innerHTML = `
                     <div style="font-size:42px">${item.icon}</div>
                     <div>${item.q}</div>
-                    <div class="timer">
-                        <div class="timer-fill"></div>
-                    </div>
+                    <div class="timer"><div class="timer-fill"></div></div>
                 `;
-                div.onclick = () => {
+                card.onclick = () => {
                     speak(item.q);
                     showAnswers(index);
                 };
-                qDiv.appendChild(div);
+                qDiv.appendChild(card);
             });
         }
 
@@ -205,22 +208,18 @@
             qDiv.style.display = "none";
             aDiv.style.display = "flex";
             const item = data[index];
-            title.innerText = item.q;
+            titleEl.textContent = item.q;
             aDiv.innerHTML = "";
             item.answers.forEach(ans => {
-                const div = document.createElement("div");
-                div.className = "card answer";
-                div.innerHTML = `
+                const card = document.createElement("div");
+                card.className = "card answer";
+                card.innerHTML = `
                     <div style="font-size:38px">${ans.i}</div>
                     <div>${ans.t}</div>
-                    <div class="timer">
-                        <div class="timer-fill"></div>
-                    </div>
+                    <div class="timer"><div class="timer-fill"></div></div>
                 `;
-                div.onclick = () => {
-                    speak(ans.t);
-                };
-                aDiv.appendChild(div);
+                card.onclick = () => speak(ans.t);
+                aDiv.appendChild(card);
             });
         }
 
@@ -228,15 +227,8 @@
             speak("terug");
             qDiv.style.display = "flex";
             aDiv.style.display = "none";
-            title.innerText = "Kies een vraag";
+            titleEl.textContent = "Kies een vraag";
         }
-
-        loadQuestions();
-
-        let currentElement = null;
-        let dwellTimeout = null;
-        let progressInterval = null;
-        let isTracking = false;
 
         function clearGaze() {
             clearTimeout(dwellTimeout);
@@ -244,60 +236,60 @@
             document.querySelectorAll(".card").forEach(el => {
                 el.classList.remove("active-gaze");
                 const fill = el.querySelector(".timer-fill");
-                if (fill) fill.style.width = "0%";
+                if(fill) fill.style.width = "0%";
             });
+            currentElement = null;
         }
 
         function startCalibration() {
-            speak("Start kalibratie. Klik op elk rode bolletje als je ernaar kijkt.");
+            updateStatus("Kalibratie gestart. Kijk naar de rode bolletjes.");
+            speak("Kalibratie start nu. Kijk naar de rode bolletjes.");
+
             webgazer.clearData();
-            webgazer.begin();
 
             const points = [
-                { x: "10%", y: "10%" },
-                { x: "90%", y: "10%" },
-                { x: "50%", y: "50%" },
-                { x: "10%", y: "90%" },
-                { x: "90%", y: "90%" }
+                {x: 10, y: 10}, {x: 90, y: 10},
+                {x: 50, y: 50},
+                {x: 10, y: 90}, {x: 90, y: 90}
             ];
 
-            let currentPoint = 0;
+            let current = 0;
             let dot = null;
 
-            function showNextPoint() {
-                if (currentPoint >= points.length) {
+            function nextPoint() {
+                if (current >= points.length) {
                     if (dot) dot.remove();
+                    updateStatus("Kalibratie klaar!");
                     startEyeTracking();
                     return;
                 }
 
                 if (dot) dot.remove();
 
-                const point = points[currentPoint];
+                const p = points[current];
                 dot = document.createElement("div");
                 dot.className = "calibration-dot";
-                dot.style.left = point.x;
-                dot.style.top = point.y;
+                dot.style.left = `${p.x}%`;
+                dot.style.top = `${p.y}%`;
                 document.body.appendChild(dot);
 
-                dot.onclick = () => {
+                setTimeout(() => {
                     const rect = dot.getBoundingClientRect();
                     webgazer.recordScreenPosition(
-                        rect.left + rect.width / 2,
-                        rect.top + rect.height / 2
+                        rect.left + rect.width/2,
+                        rect.top + rect.height/2
                     );
-                    currentPoint++;
-                    showNextPoint();
-                };
+                    current++;
+                    nextPoint();
+                }, 1500);
             }
 
-            showNextPoint();
+            nextPoint();
         }
 
         function startEyeTracking() {
-            webgazer.setTracker("clmtrackr");
-            webgazer.applyKalmanFilter(true);
             isTracking = true;
+            updateStatus("Oogbesturing actief. Kijk 2 seconden naar een kaart.");
             speak("Oogbesturing is actief. Kijk naar een kaart om te selecteren.");
 
             webgazer.setGazeListener((data) => {
@@ -309,7 +301,6 @@
 
                 if (!element) {
                     clearGaze();
-                    currentElement = null;
                     return;
                 }
 
@@ -322,7 +313,7 @@
                     let progress = 0;
                     progressInterval = setInterval(() => {
                         progress += 5;
-                        if (fill) fill.style.width = progress + "%";
+                        if (fill) fill.style.width = `${progress}%`;
                     }, 100);
 
                     dwellTimeout = setTimeout(() => {
@@ -332,6 +323,30 @@
                 }
             });
         }
+
+        // ===== INITIALISATIE =====
+        function initWebGazer() {
+            if (webGazerReady) return;
+
+            updateStatus("WebGazer laden...");
+            speak("Oogbesturing wordt gestart.");
+
+            // Wacht tot WebGazer geladen is
+            const checkWebGazer = setInterval(() => {
+                if (typeof webgazer !== 'undefined') {
+                    clearInterval(checkWebGazer);
+                    webgazer.setRegression('ridge')
+                           .setTracker('clmtrackr')
+                           .begin()
+                           .applyKalmanFilter(true);
+                    webGazerReady = true;
+                    startCalibration();
+                }
+            }, 100);
+        }
+
+        // Laad kaartjes direct bij opstarten
+        loadQuestions();
     </script>
 </body>
 </html>
